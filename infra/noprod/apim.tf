@@ -73,3 +73,56 @@ resource "azurerm_api_management_api_policy" "jwt" {
 
   depends_on = [azurerm_api_management_named_value.jwt_secret]
 }
+
+# Cualquier metodo distinto de POST responde ERROR (sin exigir JWT)
+locals {
+  blocked_methods = toset(["GET", "PUT", "PATCH", "DELETE"])
+}
+
+resource "azurerm_api_management_api_operation" "blocked" {
+  for_each = local.blocked_methods
+
+  operation_id        = "${lower(each.key)}-devops"
+  api_name            = azurerm_api_management_api.mensajeria.name
+  api_management_name = azurerm_api_management.main.name
+  resource_group_name = azurerm_resource_group.main.name
+  display_name        = "${each.key} DevOps"
+  method              = each.key
+  url_template        = "/DevOps"
+
+  response {
+    status_code = 405
+  }
+}
+
+resource "azurerm_api_management_api_operation_policy" "blocked" {
+  for_each = local.blocked_methods
+
+  api_name            = azurerm_api_management_api.mensajeria.name
+  api_management_name = azurerm_api_management.main.name
+  resource_group_name = azurerm_resource_group.main.name
+  operation_id        = azurerm_api_management_api_operation.blocked[each.key].operation_id
+
+  xml_content = <<-XML
+    <policies>
+      <inbound>
+        <return-response>
+          <set-status code="405" reason="Method Not Allowed" />
+          <set-header name="Content-Type" exists-action="override">
+            <value>text/plain</value>
+          </set-header>
+          <set-body>ERROR</set-body>
+        </return-response>
+      </inbound>
+      <backend>
+        <base />
+      </backend>
+      <outbound>
+        <base />
+      </outbound>
+      <on-error>
+        <base />
+      </on-error>
+    </policies>
+  XML
+}
