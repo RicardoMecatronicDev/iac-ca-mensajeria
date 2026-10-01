@@ -61,6 +61,7 @@ jobs:
           } >> "$GITHUB_ENV"
           while IFS= read -r line; do
             [[ -z "$line" ]] && continue
+            echo "::add-mask::${line#*=}"
             echo "TF_VAR_${line}" >> "$GITHUB_ENV"
           done <<< "$TF_VARS"
 
@@ -126,6 +127,7 @@ jobs:
           } >> "$GITHUB_ENV"
           while IFS= read -r line; do
             [[ -z "$line" ]] && continue
+            echo "::add-mask::${line#*=}"
             echo "TF_VAR_${line}" >> "$GITHUB_ENV"
           done <<< "$TF_VARS"
 
