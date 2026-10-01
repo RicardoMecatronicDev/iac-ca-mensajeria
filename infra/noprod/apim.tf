@@ -76,7 +76,7 @@ resource "azurerm_api_management_api_policy" "jwt" {
 
 # Cualquier metodo distinto de POST responde ERROR (sin exigir JWT)
 locals {
-  blocked_methods = toset(["GET", "PUT", "PATCH", "DELETE"])
+  blocked_methods = toset(["GET", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"])
 }
 
 resource "azurerm_api_management_api_operation" "blocked" {

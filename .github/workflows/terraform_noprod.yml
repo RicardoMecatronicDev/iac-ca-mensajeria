@@ -31,14 +31,14 @@ permissions:
 
 jobs:
   terraform-plan:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: noprod
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Azure Login (OIDC)
-        uses: azure/login@v2
+        uses: azure/login@v3
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
@@ -66,7 +66,7 @@ jobs:
           done <<< "$TF_VARS"
 
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: ${{ env.TF_VERSION }}
 
@@ -89,7 +89,7 @@ jobs:
   approval:
     needs: terraform-plan
     if: github.ref == 'refs/heads/master' && github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: approver_noprod
     steps:
       - name: Esperando aprobacion manual
@@ -97,14 +97,14 @@ jobs:
 
   terraform-apply:
     needs: approval
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: noprod
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Azure Login (OIDC)
-        uses: azure/login@v2
+        uses: azure/login@v3
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
@@ -132,7 +132,7 @@ jobs:
           done <<< "$TF_VARS"
 
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: ${{ env.TF_VERSION }}
 
