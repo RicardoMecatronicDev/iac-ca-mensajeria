@@ -1,0 +1,145 @@
+name: terraform-prod
+
+on:
+  push:
+    branches:
+      - "master"
+      - "develop"
+      - "feature/*"
+    paths:
+      - "infra/prod/**"
+      - ".github/workflows/terraform_prod.yml"
+  pull_request:
+    branches:
+      - "master"
+      - "develop"
+    paths:
+      - "infra/prod/**"
+  workflow_dispatch: {}
+
+concurrency:
+  group: terraform-prod
+  cancel-in-progress: false
+
+env:
+  TF_DIR: infra/prod
+  TF_VERSION: "1.15.8"
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  terraform-plan:
+    runs-on: ubuntu-24.04
+    environment: prod
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Variables de entorno para Terraform
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          TF_VARS: ${{ secrets.TF_VARS }}
+        run: |
+          {
+            echo "ARM_CLIENT_ID=$AZURE_CLIENT_ID"
+            echo "ARM_TENANT_ID=$AZURE_TENANT_ID"
+            echo "ARM_SUBSCRIPTION_ID=$AZURE_SUBSCRIPTION_ID"
+            echo "ARM_USE_OIDC=true"
+            echo "TF_VAR_subscription_id=$AZURE_SUBSCRIPTION_ID"
+            echo "TF_VAR_tenant_id=$AZURE_TENANT_ID"
+          } >> "$GITHUB_ENV"
+          while IFS= read -r line; do
+            [[ -z "$line" ]] && continue
+            echo "::add-mask::${line#*=}"
+            echo "TF_VAR_${line}" >> "$GITHUB_ENV"
+          done <<< "$TF_VARS"
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Format
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform fmt -check -recursive
+
+      - name: Terraform Init
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform init -input=false
+
+      - name: Terraform Validate
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform validate
+
+      - name: Terraform Plan
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform plan -input=false
+
+  approval:
+    needs: terraform-plan
+    if: github.ref == 'refs/heads/master' && github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    environment: approver_prod
+    steps:
+      - name: Esperando aprobacion manual
+        run: echo "Aprobado en el environment approver_prod"
+
+  terraform-apply:
+    needs: approval
+    runs-on: ubuntu-24.04
+    environment: prod
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Variables de entorno para Terraform
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          TF_VARS: ${{ secrets.TF_VARS }}
+        run: |
+          {
+            echo "ARM_CLIENT_ID=$AZURE_CLIENT_ID"
+            echo "ARM_TENANT_ID=$AZURE_TENANT_ID"
+            echo "ARM_SUBSCRIPTION_ID=$AZURE_SUBSCRIPTION_ID"
+            echo "ARM_USE_OIDC=true"
+            echo "TF_VAR_subscription_id=$AZURE_SUBSCRIPTION_ID"
+            echo "TF_VAR_tenant_id=$AZURE_TENANT_ID"
+          } >> "$GITHUB_ENV"
+          while IFS= read -r line; do
+            [[ -z "$line" ]] && continue
+            echo "::add-mask::${line#*=}"
+            echo "TF_VAR_${line}" >> "$GITHUB_ENV"
+          done <<< "$TF_VARS"
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Init
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform init -input=false
+
+      - name: Terraform Apply
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform apply -input=false -auto-approve
